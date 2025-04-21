@@ -70,7 +70,7 @@ def main():
         report_to="wandb",
         save_strategy="epoch",
         push_to_hub=True,
-        hub_model_id=f"{cfg.hub_model_id}-{cfg.dataset_path}",
+        hub_model_id=f"{cfg.hub_model_id}-1",
         hub_strategy="end",
         eval_strategy="epoch",
         fp16=cfg.is_fp16,

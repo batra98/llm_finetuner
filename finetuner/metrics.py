@@ -10,22 +10,34 @@ from wordcloud import WordCloud, STOPWORDS
 from PIL import Image
 
 
+def _wandb_log_safe(*args, **kwargs):
+    """
+    Wrapper around wandb.log that only logs if a run is active.
+    """
+    if wandb.run is not None:
+        wandb.log(*args, **kwargs)
+
+
 def log_generation_table(prompts: Sequence[str], outputs: Sequence[str]):
     """
     Log a W&B table with columns [prompt, generation].
     """
+    if wandb.run is None:
+        return
     table = wandb.Table(columns=["prompt", "generation"])
     for prompt, gen in zip(prompts, outputs):
         table.add_data(prompt, gen)
-    wandb.log({"generation_table": table})
+    _wandb_log_safe({"generation_table": table})
 
 
 def log_generation_length_histogram(outputs: Sequence[str]):
     """
     Log a histogram of generation lengths (in tokens).
     """
+    if wandb.run is None:
+        return
     lengths = [len(gen.split()) for gen in outputs]
-    wandb.log({"generation_length": wandb.Histogram(lengths)})
+    _wandb_log_safe({"generation_length": wandb.Histogram(lengths)})
 
 
 def log_generation_wordcloud(
@@ -34,6 +46,9 @@ def log_generation_wordcloud(
     """
     Generate a word‑cloud from the list of generated strings and log it to W&B.
     """
+    if wandb.run is None:
+        return
+
     # 1) build the cloud
     combined = " ".join(outputs)
     wc = WordCloud(
@@ -56,7 +71,7 @@ def log_generation_wordcloud(
 
     # 3) load into PIL and log
     img = Image.open(buf)
-    wandb.log({title: wandb.Image(img)})
+    _wandb_log_safe({title: wandb.Image(img)})
 
 
 def compute_distinct_n(texts, n):
@@ -95,8 +110,9 @@ class PerplexityCallback(TrainerCallback):
     """
 
     def on_log(self, args, state, control, logs=None, **kwargs):
-        if logs and "loss" in logs:
-            wandb.log({"train_perplexity": math.exp(logs["loss"])}, commit=False)
+        if wandb.run is None or logs is None or "loss" not in logs:
+            return
+        _wandb_log_safe({"train_perplexity": math.exp(logs["loss"])}, commit=False)
 
 
 class ManualThroughputCallback(TrainerCallback):
@@ -106,18 +122,21 @@ class ManualThroughputCallback(TrainerCallback):
 
     def __init__(self, seq_length: int):
         self.seq_length = seq_length
+        self._t0 = None
 
     def on_train_begin(self, args, state, control, **kwargs):
         self._t0 = time.time()
 
     def on_log(self, args, state, control, logs=None, **kwargs):
+        if wandb.run is None:
+            return
         elapsed = time.time() - self._t0
         samples = state.global_step * args.per_device_train_batch_size * args.world_size
         tokens_per_sec = samples * self.seq_length / elapsed
-        wandb.log({"tokens_per_second": tokens_per_sec}, commit=False)
+        _wandb_log_safe({"tokens_per_second": tokens_per_sec}, commit=False)
 
         if logs and "train_steps_per_second" in logs:
-            wandb.log(
+            _wandb_log_safe(
                 {"steps_per_second": logs["train_steps_per_second"]},
                 commit=False,
             )
@@ -133,18 +152,15 @@ class EvaluateCallback(TrainerCallback):
         self.last_val_ppl = None
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
-        # HuggingFace returns 'eval_loss'; convert to perplexity
-        val_loss = metrics.get("eval_loss")
-        if val_loss is None:
+        if wandb.run is None or metrics is None or "eval_loss" not in metrics:
             return
+        val_loss = metrics["eval_loss"]
         val_ppl = math.exp(val_loss)
 
-        # log current val PPL
-        wandb.log({"validation_perplexity": val_ppl})
+        _wandb_log_safe({"validation_perplexity": val_ppl})
 
-        # log change since last eval
         if self.last_val_ppl is not None:
-            wandb.log({"delta_val_perplexity": self.last_val_ppl - val_ppl})
+            _wandb_log_safe({"delta_val_perplexity": self.last_val_ppl - val_ppl})
         self.last_val_ppl = val_ppl
 
 
@@ -152,10 +168,12 @@ def log_generation_metrics(texts):
     """
     After generation, log distinct-1, distinct-2, and repeat-rate.
     """
+    if wandb.run is None:
+        return
     d1 = compute_distinct_n(texts, 1)
     d2 = compute_distinct_n(texts, 2)
     rr = repeat_rate(texts)
-    wandb.log(
+    _wandb_log_safe(
         {
             "distinct_1": d1,
             "distinct_2": d2,

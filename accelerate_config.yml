@@ -1,0 +1,13 @@
+compute_environment: LOCAL_MACHINE
+distributed_type: MULTI_GPU
+mixed_precision: fp16
+deepspeed_config: null
+
+num_processes: 8
+num_machines: 1
+machine_rank: 0
+
+main_process_ip: null
+main_process_port: null
+
+use_cpu: false

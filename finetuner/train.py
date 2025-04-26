@@ -5,7 +5,7 @@ import torch.distributed as dist
 from accelerate import Accelerator
 from datasets import load_dataset, Dataset
 from transformers.models.gpt2 import GPT2LMHeadModel
-from transformers import GPT2TokenizerFast
+from transformers.models.gpt2 import GPT2TokenizerFast
 from transformers.trainer import Trainer
 from transformers.training_args import TrainingArguments
 from transformers.data.data_collator import DataCollatorForLanguageModeling
@@ -112,7 +112,7 @@ def main():
         push_to_hub=True,
         hub_model_id=cfg.hub_model_id,
         hub_strategy="end",
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         fp16=cfg.is_fp16,
     )
 

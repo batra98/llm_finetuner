@@ -8,6 +8,12 @@ import io
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud, STOPWORDS
 from PIL import Image
+from torch.profiler import (
+    profile,
+    ProfilerActivity,
+    tensorboard_trace_handler,
+)
+import torch
 
 
 def _wandb_log_safe(*args, **kwargs):
@@ -122,7 +128,6 @@ class ManualThroughputCallback(TrainerCallback):
 
     def __init__(self, seq_length: int):
         self.seq_length = seq_length
-        self._t0 = None
 
     def on_train_begin(self, args, state, control, **kwargs):
         self._t0 = time.time()
@@ -180,3 +185,28 @@ def log_generation_metrics(texts):
             "repeat_rate": rr,
         }
     )
+
+
+class TorchProfilerCallback(TrainerCallback):
+    def __init__(self, output_dir="./tb_logs"):
+        self.output_dir = output_dir
+        self.prof = None
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        self.prof = profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
+            on_trace_ready=tensorboard_trace_handler(self.output_dir),
+            record_shapes=True,
+            with_stack=True,
+            profile_memory=True,
+        )
+        self.prof.__enter__()
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if self.prof:
+            self.prof.step()
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if self.prof:
+            self.prof.__exit__(None, None, None)

@@ -1,5 +1,4 @@
 import os
-import math
 import wandb
 from accelerate import Accelerator
 from transformers.models.gpt2 import GPT2LMHeadModel
@@ -14,11 +13,13 @@ from metrics import (
     EvaluateCallback,
     PerplexityCallback,
     ManualThroughputCallback,
+    TorchProfilerCallback,
     log_generation_metrics,
     log_generation_table,
     log_generation_length_histogram,
     log_generation_wordcloud,
 )
+from torch.utils.tensorboard import SummaryWriter
 
 
 def main():
@@ -31,6 +32,7 @@ def main():
     # 3) Only the main process should start a real W&B run
     if accelerator.is_main_process:
         run = wandb.init(project=cfg.wandb_project, config=cfg.model_dump())
+        tb_writer = SummaryWriter(log_dir="./tb_logs")
     else:
         # Disable W&B on other processes
         os.environ["WANDB_MODE"] = "disabled"
@@ -42,6 +44,8 @@ def main():
         n_shards=cfg.dataset_n_shards,
         seq_len=cfg.max_seq_length,
         model_name=cfg.model_name,
+        baseline=cfg.is_baseline,
+        baseline_num_samples=cfg.baseline_num_samples,
     )
     train_ds, val_ds = ds.train_test_split(test_size=0.01).values()
 
@@ -70,7 +74,7 @@ def main():
         report_to="wandb",
         save_strategy="epoch",
         push_to_hub=True,
-        hub_model_id=f"{cfg.hub_model_id}-1",
+        hub_model_id=f"{cfg.hub_model_id}",
         hub_strategy="end",
         eval_strategy="epoch",
         fp16=cfg.is_fp16,
@@ -87,6 +91,7 @@ def main():
             PerplexityCallback(),
             ManualThroughputCallback(cfg.max_seq_length),
             EvaluateCallback(),
+            TorchProfilerCallback(output_dir="./tb_logs"),
         ],
         # compute_metrics=lambda eval_pred: {"eval_perplexity": math.exp(eval_pred.loss)},
     )
@@ -96,6 +101,12 @@ def main():
 
     # 10) Push to HF Hub from main process only
     if accelerator.is_main_process:
+        artifact = wandb.Artifact(
+            f"tensorboard-logs-{cfg.hub_model_id}", type="tensorboard"
+        )
+        artifact.add_dir("./tb_logs")
+        wandb.log_artifact(artifact)
+
         trainer.push_to_hub(
             commit_message=(
                 f"Run: {run.name}, Dataset: {cfg.dataset_path}/{cfg.dataset_config}, "
@@ -119,6 +130,8 @@ def main():
         log_generation_table(prompts, outputs)
         log_generation_length_histogram(outputs)
         log_generation_wordcloud(outputs)
+
+        tb_writer.close()
 
         wandb.finish()
 

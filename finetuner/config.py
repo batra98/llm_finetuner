@@ -42,6 +42,12 @@ class Config(BaseSettings):
     eval_steps: int = Field(10, description="Number of evaluation steps")
     is_fp16: bool = Field(True, description="toggle fp16 quantization")
 
+    ## Baseline Training
+    is_baseline: bool = Field(False, description="set if running fine-tune on baseline")
+    baseline_num_samples: int = Field(
+        10000, description="number of samples of baseline"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

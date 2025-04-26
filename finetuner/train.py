@@ -32,7 +32,7 @@ def main():
     # 3) Only the main process should start a real W&B run
     if accelerator.is_main_process:
         run = wandb.init(project=cfg.wandb_project, config=cfg.model_dump())
-        tb_writer = SummaryWriter(log_dir="./tb_logs")
+        tb_writer = SummaryWriter(log_dir=f"{cfg.hub_model_id}")
     else:
         # Disable W&B on other processes
         os.environ["WANDB_MODE"] = "disabled"
@@ -91,7 +91,7 @@ def main():
             PerplexityCallback(),
             ManualThroughputCallback(cfg.max_seq_length),
             EvaluateCallback(),
-            TorchProfilerCallback(output_dir="./tb_logs"),
+            TorchProfilerCallback(output_dir=f"{cfg.hub_model_id}"),
         ],
         # compute_metrics=lambda eval_pred: {"eval_perplexity": math.exp(eval_pred.loss)},
     )
@@ -102,7 +102,7 @@ def main():
     # 10) Push to HF Hub from main process only
     if accelerator.is_main_process:
         artifact = wandb.Artifact(
-            f"tensorboard-logs-{cfg.hub_model_id}", type="tensorboard"
+            f"tensorboard-logs-{cfg.hub_model_id}".replace("/", "_"), type="tensorboard"
         )
         artifact.add_dir("./tb_logs")
         wandb.log_artifact(artifact)

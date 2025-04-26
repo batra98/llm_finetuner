@@ -104,7 +104,7 @@ def main():
         artifact = wandb.Artifact(
             f"tensorboard-logs-{cfg.hub_model_id}".replace("/", "_"), type="tensorboard"
         )
-        artifact.add_dir("./tb_logs")
+        artifact.add_dir(f"{cfg.hub_model_id}")
         wandb.log_artifact(artifact)
 
         trainer.push_to_hub(

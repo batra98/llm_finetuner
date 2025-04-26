@@ -22,6 +22,7 @@ from metrics import (
     log_generation_length_histogram,
     log_generation_wordcloud,
 )
+from torch.utils.tensorboard import SummaryWriter
 
 
 def main():
@@ -32,6 +33,7 @@ def main():
     # Only rank 0 does W&B
     if is_main:
         wandb.init(project=cfg.wandb_project, config=cfg.model_dump())
+        tb_writer = SummaryWriter(log_dir=f"{cfg.hub_model_id}")
     else:
         os.environ["WANDB_MODE"] = "disabled"
 
@@ -127,7 +129,7 @@ def main():
             PerplexityCallback(),
             ManualThroughputCallback(cfg.max_seq_length),
             EvaluateCallback(),
-            TorchProfilerCallback(output_dir=cfg.output_dir),
+            TorchProfilerCallback(output_dir=f"{cfg.hub_model_id}"),
         ],
     )
 
@@ -157,6 +159,8 @@ def main():
         log_generation_table(prompts, outputs)
         log_generation_length_histogram(outputs)
         log_generation_wordcloud(outputs)
+
+        tb_writer.close()
 
         wandb.finish()
 

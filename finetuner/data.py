@@ -57,6 +57,7 @@ def load_and_tokenize(
             subfolder,
             split="train",
             streaming=True,
+            trust_remote_code=True,
         )
         examples = []
         for i, ex in enumerate(stream):

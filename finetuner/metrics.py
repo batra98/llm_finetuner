@@ -149,8 +149,8 @@ class ManualThroughputCallback(TrainerCallback):
 
 class EvaluateCallback(TrainerCallback):
     """
-    After each evaluation, log validation_perplexity and its delta
-    relative to the previous epoch.
+    After each evaluation, log validation_perplexity and its delta.
+    Also at the very end of training, log the final_validation_perplexity.
     """
 
     def __init__(self):
@@ -167,6 +167,11 @@ class EvaluateCallback(TrainerCallback):
         if self.last_val_ppl is not None:
             _wandb_log_safe({"delta_val_perplexity": self.last_val_ppl - val_ppl})
         self.last_val_ppl = val_ppl
+
+    def on_train_end(self, args, state, control, **kwargs):
+        # Log the final validation perplexity once at the end
+        if wandb.run is not None and self.last_val_ppl is not None:
+            _wandb_log_safe({"final_validation_perplexity": self.last_val_ppl})
 
 
 def log_generation_metrics(texts):
@@ -188,11 +193,20 @@ def log_generation_metrics(texts):
 
 
 class TorchProfilerCallback(TrainerCallback):
-    def __init__(self, output_dir="./tb_logs"):
+    """
+    Runs a PyTorch profiler over the training loop, dumps
+    a Chrome trace via tensorboard_trace_handler, and then
+    logs total runtime & peak GPU memory to W&B.
+    """
+
+    def __init__(self, output_dir: str = "./tb_logs"):
         self.output_dir = output_dir
         self.prof = None
 
     def on_train_begin(self, args, state, control, **kwargs):
+        # mark start time
+        self._t0 = time.time()
+        # enter profiler context
         self.prof = profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
             schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
@@ -208,5 +222,22 @@ class TorchProfilerCallback(TrainerCallback):
             self.prof.step()
 
     def on_train_end(self, args, state, control, **kwargs):
+        # exit and write trace
         if self.prof:
             self.prof.__exit__(None, None, None)
+        # compute runtime & peak memory
+        elapsed = time.time() - self._t0
+        stats = {"train_runtime_sec": elapsed}
+
+        if torch.cuda.is_available():
+            # bytes → GiB
+            max_alloc = torch.cuda.max_memory_allocated() / (1024**3)
+            max_reserved = torch.cuda.max_memory_reserved() / (1024**3)
+            stats.update(
+                {
+                    "peak_memory_allocated_GiB": max_alloc,
+                    "peak_memory_reserved_GiB": max_reserved,
+                }
+            )
+
+        _wandb_log_safe(stats)

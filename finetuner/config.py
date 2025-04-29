@@ -28,6 +28,7 @@ class Config(BaseSettings):
         description="Dataset config, e.g., 'en'",
     )
     dataset_n_shards: int = Field(10, description="number of shards in the dataset")
+    parts_per_shards: int = Field(1, description="number of parts per shard")
     model_name: str = Field("gpt2", description="Model name or path for fine‑tuning")
     output_dir: str = Field(
         "outputs/gpt2-dedup", description="Directory to save outputs and checkpoints"

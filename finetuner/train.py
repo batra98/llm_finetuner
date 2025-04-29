@@ -89,6 +89,7 @@ def main():
             n_shards=cfg.dataset_n_shards,
             seq_len=cfg.max_seq_length,
             model_name=cfg.model_name,
+            parts_per_shard=cfg.parts_per_shards,
         )
 
     # ─── Train/val split ────────────────────────────────────────────────

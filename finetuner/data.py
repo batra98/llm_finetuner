@@ -8,19 +8,26 @@ def _download_shards(
     repo_id: str,
     subfolder: str,
     n_shards: int,
+    parts_per_shard: int,
 ) -> List[str]:
     """
-    Download chunk_1…chunk_n.parquet from a HF dataset repo and return their local paths.
+    Download all parts of each chunk:
+      chunk_{i}-00000-of-{parts_per_shard:05d}.parquet,
+      chunk_{i}-00001-of-{parts_per_shard:05d}.parquet, …
+    and return their local paths in the correct order.
     """
-    paths = []
+    paths: List[str] = []
+    total_str = f"{parts_per_shard:05d}"
     for i in range(1, n_shards + 1):
-        filename = f"{subfolder}/chunk_{i}-00000-of-00001.parquet"
-        local_path = hf_hub_download(
-            repo_id=repo_id,
-            repo_type="dataset",
-            filename=filename,
-        )
-        paths.append(local_path)
+        for part in range(parts_per_shard):
+            part_str = f"{part:05d}"
+            filename = f"{subfolder}/chunk_{i}-{part_str}-of-{total_str}.parquet"
+            local_path = hf_hub_download(
+                repo_id=repo_id,
+                repo_type="dataset",
+                filename=filename,
+            )
+            paths.append(local_path)
     return paths
 
 
@@ -32,6 +39,7 @@ def load_and_tokenize(
     *,
     # Dedup mode
     n_shards: int = 0,
+    parts_per_shard: int = 1,
     # Baseline mode
     baseline: bool = False,
     baseline_num_samples: int = 0,
@@ -72,6 +80,7 @@ def load_and_tokenize(
             repo_id=dataset_name,
             subfolder=subfolder,
             n_shards=n_shards,
+            parts_per_shard=parts_per_shard,
         )
         ds = load_dataset(
             "parquet",
